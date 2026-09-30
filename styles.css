@@ -201,6 +201,7 @@ label.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; 
 
 /* ---------- KPIs ---------- */
 .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kpis > .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .kpi {
   background: rgba(255, 255, 255, .03); border: 1px solid var(--border);
   border-radius: 14px; padding: 12px;

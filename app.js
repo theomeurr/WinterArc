@@ -83,6 +83,7 @@ function defaultState() {
       start: `${y}-10-01`,
       end: `${y}-12-31`,
       waterGoal: 2.5,
+      sleepGoal: 7,
       glass: 0.25,
       weeklyBudget: 100,
       weightGoal: null,
@@ -146,7 +147,7 @@ const planFor = k => S.settings.plan[dow(k)] || [];
 function getDay(k) {
   return S.days[k] || {
     sessions: planFor(k).map(s => ({ t: s.t, l: s.l, done: false })),
-    water: 0, food: {}, clean: null, noSpend: null, note: '',
+    water: 0, sleep: null, food: {}, clean: null, noSpend: null, note: '',
   };
 }
 function touch(k) { return (S.days[k] = getDay(k)); }
@@ -159,6 +160,7 @@ function dayScore(k) {
   const d = getDay(k), st = S.settings, parts = [];
   if (d.sessions.length) parts.push(d.sessions.filter(s => s.done).length / d.sessions.length);
   parts.push(Math.min(1, (d.water * st.glass) / st.waterGoal));
+  parts.push(d.sleep > 0 ? Math.min(1, d.sleep / st.sleepGoal) : 0);
   if (st.food.length) parts.push(st.food.filter(f => d.food[f]).length / st.food.length);
   parts.push(d.clean === true ? 1 : 0);
   parts.push(d.noSpend === true ? 1 : 0);
@@ -201,6 +203,7 @@ const urgesOn = k => S.urges.filter(u => u.date === k).length;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const eur = n => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 const liters = n => (Math.round(n * 100) / 100).toLocaleString('fr-FR') + ' L';
+const hours = n => `${Math.floor(n)} h${n % 1 ? ' ' + String(Math.round((n % 1) * 60)).padStart(2, '0') : ''}`;
 const kg = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
 const signedKg = n => (n > 0.04 ? '+' : n < -0.04 ? '−' : '±') + kg(Math.abs(n));
 const pct = (a, b) => (b ? Math.min(100, Math.round((a / b) * 100)) : 0);
@@ -333,6 +336,16 @@ function viewToday() {
     <div class="row">
       <button class="btn" data-act="water-" aria-label="Retirer un verre">−</button>
       <button class="btn primary grow" data-act="water+">+ ${Math.round(st.glass * 1000)} ml</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-h"><h2>😴 Sommeil</h2><span class="pill ${d.sleep >= st.sleepGoal ? 'ok' : ''}">${d.sleep > 0 ? pct(d.sleep, st.sleepGoal) : 0}%</span></div>
+    <div class="water-big">${d.sleep > 0 ? hours(d.sleep) : '–'} <small class="muted">/ ${hours(st.sleepGoal)}</small></div>
+    <small>Nuit dernière · idéal : ${hours(st.sleepGoal)} à ${hours(st.sleepGoal + 1)}</small>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" data-act="sleep-" aria-label="Retirer 30 minutes">− 30 min</button>
+      <button class="btn primary grow" data-act="sleep+">${d.sleep > 0 ? '+ 30 min' : `J'ai dormi ${hours(st.sleepGoal)}`}</button>
     </div>
   </section>
 
@@ -555,11 +568,12 @@ function viewBudget() {
 function viewStats() {
   const st = S.settings, t = todayKey(), len = arcLen();
   const last = t < st.end ? t : st.end;
-  let elapsed = 0, validated = 0, scoreSum = 0, water = 0, sDone = 0, sPlan = 0, noSpend = 0, clean = 0;
+  let elapsed = 0, validated = 0, scoreSum = 0, water = 0, sleep = 0, sleepN = 0, sDone = 0, sPlan = 0, noSpend = 0, clean = 0;
   for (let k = st.start; k <= last; k = addDays(k, 1)) {
     const d = getDay(k), sc = dayScore(k);
     elapsed++; scoreSum += sc; if (sc >= 80) validated++;
     water += d.water * st.glass;
+    if (d.sleep > 0) { sleep += d.sleep; sleepN++; }
     sPlan += d.sessions.length; sDone += d.sessions.filter(s => s.done).length;
     if (d.noSpend === true) noSpend++;
     if (d.clean === true) clean++;
@@ -617,6 +631,7 @@ function viewStats() {
     <div class="kpi"><div class="v">${S.urges.length}</div><div class="k">Envies résistées (SOS)</div></div>
     <div class="kpi"><div class="v">${sDone}<small> / ${sPlan}</small></div><div class="k">Séances de sport</div></div>
     <div class="kpi"><div class="v">${elapsed ? liters(water / elapsed) : '–'}</div><div class="k">Eau / jour en moyenne</div></div>
+    <div class="kpi"><div class="v">${sleepN ? hours(Math.round((sleep / sleepN) * 4) / 4) : '–'}</div><div class="k">Sommeil / nuit en moyenne</div></div>
     <div class="kpi"><div class="v">${clean}</div><div class="k">Jours clean au total</div></div>
     <div class="kpi"><div class="v">${noSpend}</div><div class="k">Jours sans dépense inutile</div></div>
   </section>
@@ -804,6 +819,9 @@ function viewSettings() {
     <div class="card-h"><h2>🎯 Objectifs</h2></div>
     <label class="field">Eau par jour (litres)
       <input type="number" inputmode="decimal" step="0.25" min="0.5" value="${st.waterGoal}" data-set="waterGoal" data-num>
+    </label>
+    <label class="field">Sommeil par nuit (heures)
+      <input type="number" inputmode="decimal" step="0.5" min="4" max="12" value="${st.sleepGoal}" data-set="sleepGoal" data-num>
     </label>
     <label class="field">Taille d'un verre
       <select data-set="glass" data-num>
@@ -1083,6 +1101,20 @@ document.addEventListener('click', e => {
       d.water = Math.max(0, d.water + (act === 'water+' ? 1 : -1));
       save();
       if (!wasOk && d.water * st.glass >= st.waterGoal) toast('Objectif hydratation atteint 💧');
+      else celebrate(k, before);
+      break;
+    }
+
+    case 'sleep+': case 'sleep-': {
+      if (!editable(k)) return;
+      before = dayScore(k);
+      const d = touch(k);
+      const wasOk = d.sleep >= st.sleepGoal;
+      if (!(d.sleep > 0)) d.sleep = act === 'sleep+' ? st.sleepGoal : st.sleepGoal - 0.5;
+      else d.sleep = Math.min(14, Math.max(0, d.sleep + (act === 'sleep+' ? 0.5 : -0.5)));
+      if (d.sleep === 0) d.sleep = null;
+      save();
+      if (!wasOk && d.sleep >= st.sleepGoal) toast('Objectif sommeil atteint 😴');
       else celebrate(k, before);
       break;
     }
