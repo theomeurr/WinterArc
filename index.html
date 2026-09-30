@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Winter Arc</title>
+  <meta name="description" content="Suivi du Winter Arc : sport, nutrition, hydratation, discipline et dépenses, du 1er octobre au 31 décembre.">
+  <meta name="theme-color" content="#070b14">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Winter Arc">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="view" class="view"></main>
+
+  <nav class="tabbar" aria-label="Navigation">
+    <button data-tab="today" class="active"><span class="ti">❄️</span><span>Jour</span></button>
+    <button data-tab="sport"><span class="ti">🏋️</span><span>Sport</span></button>
+    <button data-tab="budget"><span class="ti">💶</span><span>Budget</span></button>
+    <button data-tab="stats"><span class="ti">📈</span><span>Progrès</span></button>
+    <button data-tab="settings"><span class="ti">⚙️</span><span>Réglages</span></button>
+  </nav>
+
+  <div id="modal" class="modal" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
