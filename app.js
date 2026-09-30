@@ -64,6 +64,7 @@ function defaultState() {
       waterGoal: 2.5,
       glass: 0.25,
       weeklyBudget: 100,
+      weightGoal: null,
       food: [
         'Pas de fast-food / junk food',
         'Pas de soda ni sucreries',
@@ -170,6 +171,13 @@ function bestStreak(field) {
   return best;
 }
 
+function weightEntries() {
+  return Object.keys(S.days)
+    .filter(k => typeof S.days[k].weight === 'number')
+    .sort()
+    .map(k => ({ k, w: S.days[k].weight }));
+}
+
 const expBetween = (a, b) => S.expenses.filter(e => e.date >= a && e.date <= b);
 const sumAmt = arr => arr.reduce((t, e) => t + e.amount, 0);
 const urgesOn = k => S.urges.filter(u => u.date === k).length;
@@ -178,6 +186,8 @@ const urgesOn = k => S.urges.filter(u => u.date === k).length;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const eur = n => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 const liters = n => (Math.round(n * 100) / 100).toLocaleString('fr-FR') + ' L';
+const kg = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
+const signedKg = n => (n > 0.04 ? '+' : n < -0.04 ? '−' : '±') + kg(Math.abs(n));
 const pct = (a, b) => (b ? Math.min(100, Math.round((a / b) * 100)) : 0);
 
 function ring(p, label) {
@@ -252,6 +262,20 @@ function viewToday() {
 
   const urges = urgesOn(k);
 
+  // poids
+  const wAll = weightEntries();
+  const wPrev = wAll.filter(e => e.k < k).at(-1);
+  const wLast = wAll.filter(e => e.k <= k).at(-1);
+  let wInfo;
+  if (typeof d.weight === 'number') {
+    wInfo = wPrev ? `Enregistré ✓ · ${signedKg(d.weight - wPrev.w)} depuis la pesée du ${esc(fmtDate(wPrev.k, { day: 'numeric', month: 'short' }))}` : 'Enregistré ✓ · première pesée, ton point de départ.';
+  } else if (wLast) {
+    wInfo = `Dernière pesée : <b>${kg(wLast.w)}</b> le ${esc(fmtDate(wLast.k, { weekday: 'short', day: 'numeric', month: 'short' }))}.`;
+  } else {
+    wInfo = 'Pèse-toi le matin à jeun, 1 à 2 fois par semaine, toujours dans les mêmes conditions.';
+  }
+  const wDelta = wAll.length >= 2 && wLast ? wLast.w - wAll[0].w : null;
+
   return `
   <header class="top">
     <div class="brand">WINTER ARC</div>
@@ -324,6 +348,17 @@ function viewToday() {
       <button class="btn ${d.noSpend === false ? 'sel-bad' : ''}" data-act="nospend" data-v="0">💸 Craqué</button>
     </div>
     <button class="btn block" data-act="exp-new">+ Ajouter une dépense</button>
+  </section>
+
+  <section class="card">
+    <div class="card-h"><h2>⚖️ Poids</h2>${wDelta != null ? `<span class="pill">${signedKg(wDelta)} depuis le début</span>` : ''}</div>
+    <div class="row">
+      <input type="text" inputmode="decimal" id="weight" class="grow" autocomplete="off"
+        placeholder="${wLast ? esc(String(wLast.w).replace('.', ',')) : 'ex : 75,0'}"
+        value="${typeof d.weight === 'number' ? esc(String(d.weight).replace('.', ',')) : ''}" aria-label="Poids en kg">
+      <span class="muted" style="font-weight:700">kg</span>
+    </div>
+    <small>${wInfo}</small>
   </section>
 
   <section class="card">
@@ -571,6 +606,8 @@ function viewStats() {
     <div class="kpi"><div class="v">${noSpend}</div><div class="k">Jours sans dépense inutile</div></div>
   </section>
 
+  ${weightCard()}
+
   <section class="card">
     <div class="card-h"><h2>📊 Score par semaine</h2></div>
     <div class="wbars">${bars.join('')}</div>
@@ -587,6 +624,135 @@ function viewStats() {
     </div>
     <div class="months">${months.join('')}</div>
   </section>`;
+}
+
+/* ---------------- poids : carte + courbe ---------------- */
+function weightCard() {
+  const pts = weightEntries(), goal = S.settings.weightGoal;
+  if (!pts.length) {
+    return `<section class="card"><div class="card-h"><h2>⚖️ Poids</h2></div>
+      <p class="muted" style="margin:0">Aucune pesée pour l'instant. Entre ton poids dans l'onglet Jour.</p></section>`;
+  }
+  const first = pts[0], last = pts.at(-1);
+  const rows = pts.slice().reverse().map((p, i, arr) => {
+    const prev = arr[i + 1];
+    return `<div class="exp">
+      <div class="grow"><b>${esc(fmtDate(p.k, { weekday: 'short', day: 'numeric', month: 'long' }))}</b></div>
+      <small>${prev ? signedKg(p.w - prev.w) : 'départ'}</small>
+      <span class="amt">${kg(p.w)}</span>
+      <button class="xbtn" style="height:34px" data-act="weight-del" data-k="${p.k}" aria-label="Supprimer la pesée">✕</button>
+    </div>`;
+  }).join('');
+  return `
+  <section class="card">
+    <div class="card-h"><h2>⚖️ Poids</h2><span class="pill">${pts.length} pesée${pts.length > 1 ? 's' : ''}</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${kg(first.w)}</div><div class="k">Départ · ${esc(fmtDate(first.k, { day: 'numeric', month: 'short' }))}</div></div>
+      <div class="kpi"><div class="v">${kg(last.w)}</div><div class="k">Actuel · ${esc(fmtDate(last.k, { day: 'numeric', month: 'short' }))}</div></div>
+      <div class="kpi"><div class="v">${pts.length > 1 ? signedKg(last.w - first.w) : '–'}</div><div class="k">Évolution</div></div>
+      <div class="kpi"><div class="v">${goal ? kg(goal) : '–'}</div><div class="k">${goal ? (Math.abs(last.w - goal) < 0.05 ? 'Objectif atteint 🎯' : `Objectif · reste ${kg(Math.abs(last.w - goal))}`) : 'Objectif (Réglages)'}</div></div>
+    </div>
+    <div id="wchart" class="wchart"></div>
+    <details class="more">
+      <summary>Voir toutes les pesées (${pts.length})</summary>
+      <div style="margin-top:6px">${rows}</div>
+    </details>
+  </section>`;
+}
+
+function drawWeightChart() {
+  const box = document.getElementById('wchart');
+  if (!box) return;
+  const pts = weightEntries(), st = S.settings, goal = st.weightGoal;
+  if (pts.length < 2) {
+    box.innerHTML = '<p class="muted" style="margin:0">La courbe apparaîtra dès ta 2e pesée.</p>';
+    return;
+  }
+  const W = box.clientWidth, H = 190, m = { l: 34, r: 14, t: 14, b: 24 };
+  const x0 = pts[0].k < st.start ? pts[0].k : st.start;
+  const x1 = pts.at(-1).k > st.end ? pts.at(-1).k : st.end;
+  const span = Math.max(1, diffDays(x0, x1));
+  const vals = pts.map(p => p.w).concat(goal ? [goal] : []);
+  let lo = Math.min(...vals) - 0.5, hi = Math.max(...vals) + 0.5;
+  const step = [0.5, 1, 2, 5, 10, 20].find(s => (hi - lo) / s <= 4) || 50;
+  lo = Math.floor(lo / step) * step;
+  hi = Math.ceil(hi / step) * step;
+  const X = k => m.l + (diffDays(x0, k) / span) * (W - m.l - m.r);
+  const Y = v => m.t + ((hi - v) / (hi - lo)) * (H - m.t - m.b);
+  const fmt = v => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+
+  let g = '';
+  for (let v = lo; v <= hi + 1e-9; v += step) {
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" class="wc-grid"/>`;
+    g += `<text x="${m.l - 6}" y="${Y(v) + 3.5}" text-anchor="end" class="wc-txt">${fmt(v)}</text>`;
+  }
+  const d0 = parseKey(x0);
+  for (let k = keyOf(new Date(d0.getFullYear(), d0.getMonth() + (d0.getDate() > 1 ? 1 : 0), 1)); k <= x1;) {
+    const md = parseKey(k);
+    g += `<text x="${X(k)}" y="${H - 6}" text-anchor="middle" class="wc-txt">${esc(md.toLocaleDateString('fr-FR', { month: 'short' }))}</text>`;
+    k = keyOf(new Date(md.getFullYear(), md.getMonth() + 1, 1));
+  }
+  if (goal) {
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(goal)}" y2="${Y(goal)}" class="wc-goal"/>`;
+    g += `<text x="${W - m.r}" y="${Y(goal) - 5}" text-anchor="end" class="wc-txt">Objectif ${fmt(goal)}</text>`;
+  }
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.k).toFixed(1)},${Y(p.w).toFixed(1)}`).join('');
+  const last = pts.at(-1);
+  const dots = pts.map(p => `<circle cx="${X(p.k)}" cy="${Y(p.w)}" r="4" class="wc-dot"/>`).join('');
+
+  box.innerHTML = `
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img"
+      aria-label="Courbe de poids : de ${kg(pts[0].w)} à ${kg(last.w)}">
+      ${g}
+      <line class="wc-cross" y1="${m.t}" y2="${H - m.b}" x1="0" x2="0" visibility="hidden"/>
+      <path d="${path}" class="wc-line"/>
+      ${dots}
+      ${X(last.k) < W - 50
+        ? `<text x="${X(last.k) + 9}" y="${Y(last.w) + 4}" class="wc-end">${fmt(last.w)}</text>`
+        : `<text x="${X(last.k)}" y="${Y(last.w) - 11}" text-anchor="end" class="wc-end">${fmt(last.w)}</text>`}
+      <rect x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent"/>
+    </svg>
+    <div class="wtip" hidden><b></b><small></small></div>`;
+
+  const svg = box.querySelector('svg'), cross = svg.querySelector('.wc-cross');
+  const tip = box.querySelector('.wtip'), dotEls = svg.querySelectorAll('.wc-dot');
+  let cur = -1;
+  const show = i => {
+    cur = i;
+    const p = pts[i], x = X(p.k);
+    cross.setAttribute('x1', x);
+    cross.setAttribute('x2', x);
+    cross.setAttribute('visibility', 'visible');
+    dotEls.forEach((el, j) => el.classList.toggle('on', j === i));
+    tip.querySelector('b').textContent = kg(p.w);
+    tip.querySelector('small').textContent = fmtDate(p.k, { weekday: 'short', day: 'numeric', month: 'short' }) +
+      (i ? ` · ${signedKg(p.w - pts[i - 1].w)}` : ' · départ');
+    tip.hidden = false;
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(W - tw, x - tw / 2)) + 'px';
+    tip.style.top = Math.max(0, Y(p.w) - 58) + 'px';
+  };
+  const hide = () => {
+    cur = -1;
+    cross.setAttribute('visibility', 'hidden');
+    tip.hidden = true;
+    dotEls.forEach(el => el.classList.remove('on'));
+  };
+  const nearest = e => {
+    const x = e.clientX - svg.getBoundingClientRect().left;
+    let best = 0;
+    pts.forEach((p, i) => { if (Math.abs(X(p.k) - x) < Math.abs(X(pts[best].k) - x)) best = i; });
+    return best;
+  };
+  svg.addEventListener('pointermove', e => show(nearest(e)));
+  svg.addEventListener('pointerdown', e => show(nearest(e)));
+  svg.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hide(); });
+  svg.addEventListener('focus', () => show(pts.length - 1));
+  svg.addEventListener('blur', hide);
+  svg.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') { show(Math.max(0, cur - 1)); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { show(Math.min(pts.length - 1, cur + 1)); e.preventDefault(); }
+  });
 }
 
 /* =========================================================
@@ -628,6 +794,9 @@ function viewSettings() {
       <select data-set="glass" data-num>
         ${[0.2, 0.25, 0.33, 0.5].map(v => `<option value="${v}" ${v === st.glass ? 'selected' : ''}>${Math.round(v * 1000)} ml</option>`).join('')}
       </select>
+    </label>
+    <label class="field">Objectif de poids (kg, optionnel)
+      <input type="text" inputmode="decimal" value="${st.weightGoal ? esc(String(st.weightGoal).replace('.', ',')) : ''}" data-set="weightGoal" data-num data-optional placeholder="ex : 72">
     </label>
     <label class="field">Budget par semaine (€)
       <input type="number" inputmode="decimal" step="5" min="1" value="${st.weeklyBudget}" data-set="weeklyBudget" data-num>
@@ -829,6 +998,7 @@ function render() {
   const views = { today: viewToday, sport: viewSport, budget: viewBudget, stats: viewStats, settings: viewSettings };
   $view.innerHTML = views[ui.tab]();
   document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
+  if (ui.tab === 'stats') drawWeightChart();
 }
 
 function editable(k) {
@@ -956,6 +1126,12 @@ document.addEventListener('click', e => {
       save();
       break;
 
+    case 'weight-del':
+      if (!confirm('Supprimer cette pesée ?')) return;
+      delete S.days[el.dataset.k].weight;
+      save();
+      break;
+
     case 'week-prev': ui.week = addDays(ui.week || weekStart(todayKey()), -7); break;
     case 'week-next': ui.week = addDays(ui.week || weekStart(todayKey()), 7); break;
     case 'bweek-prev': ui.bweek = addDays(ui.bweek || weekStart(todayKey()), -7); break;
@@ -1009,6 +1185,7 @@ document.addEventListener('change', e => {
   if (t.dataset.set) {
     const key = t.dataset.set;
     const v = 'num' in t.dataset ? parseFloat(String(t.value).replace(',', '.')) : t.value;
+    if ('optional' in t.dataset && !String(t.value).trim()) { st[key] = null; save(); render(); toast('Objectif retiré'); return; }
     if ('num' in t.dataset && !(v > 0)) { toast('Valeur invalide'); render(); return; }
     if ((key === 'start' && v >= st.end) || (key === 'end' && v <= st.start) || !v) { toast('Dates invalides'); render(); return; }
     st[key] = v;
@@ -1028,6 +1205,21 @@ document.addEventListener('change', e => {
     }
     save();
     toast('Enregistré');
+  } else if (t.id === 'weight') {
+    const k = ui.date;
+    if (!editable(k)) { t.value = ''; return; }
+    const raw = t.value.trim();
+    if (!raw) {
+      if (S.days[k]) { delete S.days[k].weight; save(); }
+      render();
+      return;
+    }
+    const w = parseFloat(raw.replace(',', '.'));
+    if (!(w >= 30 && w <= 300)) { toast('Poids invalide'); t.value = ''; return; }
+    touch(k).weight = Math.round(w * 10) / 10;
+    save();
+    render();
+    toast('Pesée enregistrée ⚖️');
   } else if (t.id === 'import-file') {
     importData(t.files[0]);
     t.value = '';
@@ -1054,6 +1246,12 @@ document.addEventListener('visibilitychange', () => {
     ui.lastToday = t;
     render();
   }
+});
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (ui.tab === 'stats') drawWeightChart(); }, 150);
 });
 
 window.addEventListener('beforeinstallprompt', e => {
