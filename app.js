@@ -14,6 +14,21 @@ const TYPES = {
   autre: { label: 'Autre', icon: '➕', color: '#94a3b8' },
 };
 
+const SCROLL_ALTS = [
+  '💪 20 pompes ou 30 squats, maintenant.',
+  '📖 Lis 10 pages.',
+  '🚶 Sors marcher 10 min, téléphone dans la poche.',
+  '🧘 5 min d\'étirements ou de mobilité.',
+  '🎯 Avance 25 min sur un truc important (minuteur, téléphone retourné).',
+  '🧹 Range ton bureau ou ta chambre pendant 5 min.',
+  '📞 Appelle ou écris à un proche.',
+  '🎒 Prépare ton sac ou ta tenue pour demain.',
+  '📵 Pose ton téléphone dans une autre pièce.',
+  '✍️ Écris ta note du jour.',
+  '💧 Bois un grand verre d\'eau.',
+  '🚿 Douche froide de 30 secondes.',
+];
+
 const EXP_CATS = ['Courses', 'Fast-food / resto', 'Sorties', 'Shopping', 'Abonnements', 'Transport', 'Autre'];
 const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DOW_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
@@ -137,7 +152,7 @@ function save() {
   catch { toast('⚠️ Impossible de sauvegarder'); }
 }
 
-const ui = { tab: 'today', date: todayKey(), lastToday: todayKey(), week: null, bweek: null };
+const ui = { scrollTip: null, tab: 'today', date: todayKey(), lastToday: todayKey(), week: null, bweek: null };
 let modalState = null;
 let deferredPrompt = null;
 
@@ -147,7 +162,7 @@ const planFor = k => S.settings.plan[dow(k)] || [];
 function getDay(k) {
   return S.days[k] || {
     sessions: planFor(k).map(s => ({ t: s.t, l: s.l, done: false })),
-    water: 0, sleep: null, food: {}, clean: null, noSpend: null, note: '',
+    water: 0, sleep: null, food: {}, clean: null, noScroll: null, noSpend: null, note: '',
   };
 }
 function touch(k) { return (S.days[k] = getDay(k)); }
@@ -163,6 +178,7 @@ function dayScore(k) {
   parts.push(d.sleep > 0 ? Math.min(1, d.sleep / st.sleepGoal) : 0);
   if (st.food.length) parts.push(st.food.filter(f => d.food[f]).length / st.food.length);
   parts.push(d.clean === true ? 1 : 0);
+  parts.push(d.noScroll === true ? 1 : 0);
   parts.push(d.noSpend === true ? 1 : 0);
   return Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 100);
 }
@@ -362,6 +378,20 @@ function viewToday() {
       <button class="btn ${d.clean === false ? 'sel-bad' : ''}" data-act="clean" data-v="0">Rechute</button>
     </div>
     <button class="btn sos" data-act="sos">🆘 Grosse envie ? Mode SOS</button>
+  </section>
+
+  <section class="card">
+    <div class="card-h"><h2>📵 Pas de scroll</h2></div>
+    <div class="streak"><span class="n">${currentStreak('noScroll')}</span><span class="t">jour${currentStreak('noScroll') > 1 ? 's' : ''} sans scroll d'affilée<br><small>Record : ${bestStreak('noScroll')} j</small></span></div>
+    <div class="seg">
+      <button class="btn ${d.noScroll === true ? 'sel-ok' : ''}" data-act="noscroll" data-v="1">✅ Journée sans scroll</button>
+      <button class="btn ${d.noScroll === false ? 'sel-bad' : ''}" data-act="noscroll" data-v="0">😵‍💫 J'ai scrollé</button>
+    </div>
+    ${ui.scrollTip == null
+      ? '<button class="btn block" data-act="scroll-tip">Envie de scroller ? Fais plutôt…</button>'
+      : `<div class="scroll-tip"><b>${esc(SCROLL_ALTS[ui.scrollTip])}</b>
+          <div class="row"><button class="btn grow" data-act="scroll-tip">🔄 Autre idée</button><button class="btn" data-act="scroll-tip-close" aria-label="Fermer">✕</button></div>
+        </div>`}
   </section>
 
   <section class="card">
@@ -568,7 +598,7 @@ function viewBudget() {
 function viewStats() {
   const st = S.settings, t = todayKey(), len = arcLen();
   const last = t < st.end ? t : st.end;
-  let elapsed = 0, validated = 0, scoreSum = 0, water = 0, sleep = 0, sleepN = 0, sDone = 0, sPlan = 0, noSpend = 0, clean = 0;
+  let elapsed = 0, validated = 0, scoreSum = 0, water = 0, sleep = 0, sleepN = 0, sDone = 0, sPlan = 0, noSpend = 0, clean = 0, noScroll = 0;
   for (let k = st.start; k <= last; k = addDays(k, 1)) {
     const d = getDay(k), sc = dayScore(k);
     elapsed++; scoreSum += sc; if (sc >= 80) validated++;
@@ -577,6 +607,7 @@ function viewStats() {
     sPlan += d.sessions.length; sDone += d.sessions.filter(s => s.done).length;
     if (d.noSpend === true) noSpend++;
     if (d.clean === true) clean++;
+    if (d.noScroll === true) noScroll++;
   }
   const avg = elapsed ? Math.round(scoreSum / elapsed) : 0;
   const p = pct(elapsed, len);
@@ -634,6 +665,8 @@ function viewStats() {
     <div class="kpi"><div class="v">${sleepN ? hours(Math.round((sleep / sleepN) * 4) / 4) : '–'}</div><div class="k">Sommeil / nuit en moyenne</div></div>
     <div class="kpi"><div class="v">${clean}</div><div class="k">Jours clean au total</div></div>
     <div class="kpi"><div class="v">${noSpend}</div><div class="k">Jours sans dépense inutile</div></div>
+    <div class="kpi"><div class="v" style="color:var(--accent)">${currentStreak('noScroll')} j</div><div class="k">Série sans scroll · record ${bestStreak('noScroll')} j</div></div>
+    <div class="kpi"><div class="v">${noScroll}</div><div class="k">Jours sans scroll au total</div></div>
   </section>
 
   ${weightCard()}
@@ -1129,18 +1162,28 @@ document.addEventListener('click', e => {
       break;
     }
 
-    case 'clean': case 'nospend': {
+    case 'clean': case 'nospend': case 'noscroll': {
       if (!editable(k)) return;
       before = dayScore(k);
-      const field = act === 'clean' ? 'clean' : 'noSpend';
+      const field = { clean: 'clean', nospend: 'noSpend', noscroll: 'noScroll' }[act];
       const d = touch(k), v = el.dataset.v === '1';
       d[field] = d[field] === v ? null : v;
       save();
       if (field === 'clean' && d.clean === false) toast("Rechute notée. Ça n'efface pas ton travail : repars maintenant.");
       else if (field === 'clean' && d.clean === true) toast(`🛡️ ${currentStreak('clean')} jour(s) clean`);
+      else if (field === 'noScroll' && d.noScroll === false) toast('Noté. Demain, téléphone loin du lit. 📵');
+      else if (field === 'noScroll' && d.noScroll === true) toast(`📵 ${currentStreak('noScroll')} jour(s) sans scroll`);
       else celebrate(k, before);
       break;
     }
+
+    case 'scroll-tip': {
+      let i;
+      do i = Math.floor(Math.random() * SCROLL_ALTS.length); while (i === ui.scrollTip);
+      ui.scrollTip = i;
+      break;
+    }
+    case 'scroll-tip-close': ui.scrollTip = null; break;
 
     case 'sos': openSOS(); return;
     case 'sos-act': el.classList.toggle('on'); return;

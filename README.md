@@ -2,7 +2,7 @@
 
 PWA mobile de suivi du Winter Arc (1er octobre → 31 décembre).
 
-- **Jour** : séances du jour (selon le planning), eau, sommeil (objectif 7-8 h), règles nutrition, anti-luxure (série clean + mode SOS), dépenses, note. Score du jour sur 100 %, une journée est validée à partir de 80 %.
+- **Jour** : séances du jour (selon le planning), eau, sommeil (objectif 7-8 h), règles nutrition, anti-luxure (série clean + mode SOS), pas de scroll (série + idées pour remplacer l'envie), dépenses, note. Score du jour sur 100 %, une journée est validée à partir de 80 %.
 - **Sport** : objectifs de la semaine par type, planning type modifiable.
 - **Budget** : budget hebdo, dépenses nécessaires / superflues, répartition par catégorie.
 - **Progrès** : stats globales (dont sommeil moyen), courbe de poids (objectif optionnel), score par semaine, calendrier coloré des 92 jours.
