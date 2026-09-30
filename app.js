@@ -54,6 +54,27 @@ const weekStart = k => addDays(k, -dow(k));
 const fmtDate = (k, opts) => parseKey(k).toLocaleDateString('fr-FR', opts || { weekday: 'long', day: 'numeric', month: 'long' });
 
 /* ---------------- state ---------------- */
+const DEFAULT_PLAN = [
+  [{ t: 'bad', l: 'Entraînement badminton (soir)' }],
+  [{ t: 'muscu', l: 'Push (pecs, épaules, triceps) (soir)' }],
+  [{ t: 'frac', l: 'Fractionné court (midi)' }, { t: 'muscu', l: 'Pull (dos, biceps) (soir)' }],
+  [{ t: 'bad', l: 'Entraînement badminton (soir)' }],
+  [],
+  [{ t: 'muscu', l: 'Legs (jambes)' }, { t: 'foot', l: 'Footing 20-30 min, très facile' }],
+  [],
+];
+
+// Ancien planning par défaut : remplacé automatiquement s'il n'a pas été personnalisé.
+const OLD_DEFAULT_PLAN = [
+  [{ t: 'muscu', l: 'Jambes' }],
+  [{ t: 'muscu', l: 'Push (pecs, épaules, triceps)' }],
+  [{ t: 'bad', l: 'Entraînement badminton' }],
+  [{ t: 'muscu', l: 'Pull (dos, biceps)' }, { t: 'foot', l: 'Footing 30-40 min, allure facile' }],
+  [{ t: 'frac', l: 'Fractionné' }],
+  [{ t: 'bad', l: 'Entraînement badminton' }, { t: 'muscu', l: 'Haut du corps / bras' }],
+  [],
+];
+
 function defaultState() {
   const y = new Date().getFullYear();
   return {
@@ -77,15 +98,7 @@ function defaultState() {
         "• Plus d'énergie, plus de focus, plus de confiance.\n" +
         "• C'est moi qui contrôle mes envies, pas l'inverse.\n" +
         "• Mon temps et mon énergie vont dans mes objectifs.",
-      plan: [
-        [{ t: 'muscu', l: 'Jambes' }],
-        [{ t: 'muscu', l: 'Push (pecs, épaules, triceps)' }],
-        [{ t: 'bad', l: 'Entraînement badminton' }],
-        [{ t: 'muscu', l: 'Pull (dos, biceps)' }, { t: 'foot', l: 'Footing 30-40 min, allure facile' }],
-        [{ t: 'frac', l: 'Fractionné' }],
-        [{ t: 'bad', l: 'Entraînement badminton' }, { t: 'muscu', l: 'Haut du corps / bras' }],
-        [],
-      ],
+      plan: structuredClone(DEFAULT_PLAN),
     },
     days: {},
     expenses: [],
@@ -96,9 +109,11 @@ function defaultState() {
 function normalize(s) {
   const d = defaultState();
   if (!s || typeof s !== 'object') return d;
+  const settings = { ...d.settings, ...(s.settings || {}) };
+  if (JSON.stringify(settings.plan) === JSON.stringify(OLD_DEFAULT_PLAN)) settings.plan = structuredClone(DEFAULT_PLAN);
   return {
     v: 1,
-    settings: { ...d.settings, ...(s.settings || {}) },
+    settings,
     days: s.days && typeof s.days === 'object' ? s.days : {},
     expenses: Array.isArray(s.expenses) ? s.expenses : [],
     urges: Array.isArray(s.urges) ? s.urges : [],
