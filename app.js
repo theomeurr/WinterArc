@@ -101,6 +101,7 @@ function defaultState() {
       sleepGoal: 7,
       glass: 0.25,
       weeklyBudget: 100,
+      freeMeals: 2,
       weightGoal: null,
       food: [
         'Pas de fast-food / junk food',
@@ -169,6 +170,10 @@ function touch(k) { return (S.days[k] = getDay(k)); }
 
 const arcLen = () => diffDays(S.settings.start, S.settings.end) + 1;
 const arcDay = k => diffDays(S.settings.start, k) + 1;
+const freeMealsInWeek = k => {
+  const ws = weekStart(k);
+  return Array.from({ length: 7 }, (_, j) => addDays(ws, j)).filter(x => S.days[x]?.freeMeal).length;
+};
 const inArc = k => k >= S.settings.start && k <= S.settings.end;
 
 function dayScore(k) {
@@ -368,6 +373,10 @@ function viewToday() {
   <section class="card">
     <div class="card-h"><h2>🥗 Nutrition</h2><span class="pill ${foodDone === st.food.length && st.food.length ? 'ok' : ''}">${foodDone}/${st.food.length}</span></div>
     <div class="checklist">${food || '<p class="muted" style="margin:0">Ajoute tes règles dans Réglages.</p>'}</div>
+    <button class="btn block free-meal ${d.freeMeal ? 'on' : ''}" data-act="freemeal">
+      <span>🍽️ ${d.freeMeal ? 'Repas libre ✓' : 'Repas libre'}</span>
+      <span class="pill ${freeMealsInWeek(k) > st.freeMeals ? 'warn' : ''}">${freeMealsInWeek(k)}/${st.freeMeals} cette sem.</span>
+    </button>
   </section>
 
   <section class="card">
@@ -598,7 +607,7 @@ function viewBudget() {
 function viewStats() {
   const st = S.settings, t = todayKey(), len = arcLen();
   const last = t < st.end ? t : st.end;
-  let elapsed = 0, validated = 0, scoreSum = 0, water = 0, sleep = 0, sleepN = 0, sDone = 0, sPlan = 0, noSpend = 0, clean = 0, noScroll = 0;
+  let elapsed = 0, validated = 0, scoreSum = 0, water = 0, sleep = 0, sleepN = 0, sDone = 0, sPlan = 0, noSpend = 0, clean = 0, noScroll = 0, freeMeals = 0;
   for (let k = st.start; k <= last; k = addDays(k, 1)) {
     const d = getDay(k), sc = dayScore(k);
     elapsed++; scoreSum += sc; if (sc >= 80) validated++;
@@ -608,6 +617,7 @@ function viewStats() {
     if (d.noSpend === true) noSpend++;
     if (d.clean === true) clean++;
     if (d.noScroll === true) noScroll++;
+    if (d.freeMeal) freeMeals++;
   }
   const avg = elapsed ? Math.round(scoreSum / elapsed) : 0;
   const p = pct(elapsed, len);
@@ -622,10 +632,11 @@ function viewStats() {
     for (let k = m; k < next; k = addDays(k, 1)) {
       const num = parseKey(k).getDate();
       if (!inArc(k)) { cells += `<div class="cell" style="opacity:.25">${num}</div>`; continue; }
-      if (k > t) { cells += `<div class="cell future">${num}</div>`; continue; }
+      const fm = S.days[k]?.freeMeal ? '<span class="fm" aria-hidden="true">🍽️</span>' : '';
+      if (k > t) { cells += `<div class="cell future">${num}${fm}</div>`; continue; }
       const sc = dayScore(k);
       const lv = sc >= 100 ? 4 : sc >= 80 ? 3 : sc >= 50 ? 2 : sc >= 20 ? 1 : 0;
-      cells += `<button class="cell l${lv} ${k === t ? 'today' : ''}" data-act="goto" data-k="${k}" aria-label="${esc(fmtDate(k))} : ${sc}%">${num}</button>`;
+      cells += `<button class="cell l${lv} ${k === t ? 'today' : ''}" data-act="goto" data-k="${k}" aria-label="${esc(fmtDate(k))} : ${sc}%${fm ? ', repas libre' : ''}">${num}${fm}</button>`;
     }
     months.push(`<div class="month"><h3>${esc(md.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }))}</h3><div class="cal">${cells}</div></div>`);
     m = next;
@@ -667,6 +678,7 @@ function viewStats() {
     <div class="kpi"><div class="v">${noSpend}</div><div class="k">Jours sans dépense inutile</div></div>
     <div class="kpi"><div class="v" style="color:var(--accent)">${currentStreak('noScroll')} j</div><div class="k">Série sans scroll · record ${bestStreak('noScroll')} j</div></div>
     <div class="kpi"><div class="v">${noScroll}</div><div class="k">Jours sans scroll au total</div></div>
+    <div class="kpi"><div class="v">${freeMeals}</div><div class="k">Repas libres · marge ${st.freeMeals}/semaine</div></div>
   </section>
 
   ${weightCard()}
@@ -684,6 +696,7 @@ function viewStats() {
       <span class="cell l2"></span>50+
       <span class="cell l3"></span>80+
       <span class="cell l4"></span>100 %
+      <span>🍽️ repas libre</span>
     </div>
     <div class="months">${months.join('')}</div>
   </section>`;
@@ -863,6 +876,9 @@ function viewSettings() {
     </label>
     <label class="field">Objectif de poids (kg, optionnel)
       <input type="text" inputmode="decimal" value="${st.weightGoal ? esc(String(st.weightGoal).replace('.', ',')) : ''}" data-set="weightGoal" data-num data-optional placeholder="ex : 72">
+    </label>
+    <label class="field">Repas libres par semaine (resto, sorties)
+      <input type="number" inputmode="numeric" step="1" min="1" value="${st.freeMeals}" data-set="freeMeals" data-num>
     </label>
     <label class="field">Budget par semaine (€)
       <input type="number" inputmode="decimal" step="5" min="1" value="${st.weeklyBudget}" data-set="weeklyBudget" data-num>
@@ -1159,6 +1175,18 @@ document.addEventListener('click', e => {
       d.food[f] = !d.food[f];
       save();
       celebrate(k, before);
+      break;
+    }
+
+    case 'freemeal': {
+      if (!editable(k)) return;
+      const d = touch(k);
+      d.freeMeal = !d.freeMeal;
+      save();
+      if (d.freeMeal) {
+        const n = freeMealsInWeek(k);
+        toast(n > st.freeMeals ? `⚠️ ${n} repas libres cette semaine (marge : ${st.freeMeals})` : `🍽️ Repas libre noté · ${n}/${st.freeMeals} cette semaine`);
+      }
       break;
     }
 

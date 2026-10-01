@@ -1,5 +1,5 @@
 // Incrémente la version à chaque mise à jour de l'app pour forcer le rafraîchissement du cache.
-const CACHE = 'winterarc-v5';
+const CACHE = 'winterarc-v6';
 const ASSETS = [
   './',
   './index.html',
